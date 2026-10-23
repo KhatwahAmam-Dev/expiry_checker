@@ -72,7 +72,7 @@
             <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Username / Nama Petugas</label>
-                    <input type="text" id="login-user" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Andrew_CS77">
+                    <input type="text" id="login-user" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Yudi Wiranto">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Password</label>
@@ -327,9 +327,13 @@
         </div>
     </div>
 
-    <!-- HIDDEN EXPORT PDF CONTAINER (FIXED RENDERING & MARGIN A4) -->
-    <div style="position: absolute; left: -9999px; top: 0; width: 210mm;">
-    <div id="pdf-export-area" class="p-5 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; box-sizing: border-box;">
+    <!-- HIDDEN EXPORT PDF CONTAINER
+         A4 = 210mm x 297mm.
+         html2pdf diberi margin 10mm, jadi area konten HARUS 190mm lebar.
+         Ini mencegah sisi kanan terpotong saat dirender ke PDF. -->
+    <div style="position: absolute; left: -9999px; top: 0; width: 190mm;">
+        <div id="pdf-export-area" class="bg-white text-slate-800"
+             style="width: 190mm; min-height: 277mm; padding: 8mm; box-sizing: border-box; overflow: hidden;">
             <div class="border-b-2 border-slate-800 pb-3 mb-4 flex justify-between items-end">
                 <div>
                     <h2 class="text-xl font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
@@ -347,15 +351,16 @@
                 <div><strong>Total Item:</strong> <span id="pdf-print-total">0</span></div>
             </div>
 
-            <table class="w-full border-collapse border border-slate-400 text-[11px] mb-6">
+            <table class="w-full border-collapse border border-slate-400 text-[10px] mb-6"
+                   style="table-layout: fixed; width: 100%;">
                 <thead>
                     <tr class="bg-slate-200 text-slate-900 text-center">
-                        <th class="border border-slate-400 p-1.5 w-10">No</th>
-                        <th class="border border-slate-400 p-1.5 w-32">Barcode Visual</th>
-                        <th class="border border-slate-400 p-1.5">PLU & Deskripsi Barang</th>
-                        <th class="border border-slate-400 p-1.5 w-24">Exp Date</th>
-                        <th class="border border-slate-400 p-1.5 w-28">Batas Tarik</th>
-                        <th class="border border-slate-400 p-1.5 w-12">Qty</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 7%;">No</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 25%;">Barcode Visual</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 35%;">PLU & Deskripsi Barang</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 13%;">Exp Date</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 14%;">Batas Tarik</th>
+                        <th class="border border-slate-400 p-1.5" style="width: 6%;">Qty</th>
                     </tr>
                 </thead>
                 <tbody id="pdf-table-body">
@@ -638,65 +643,159 @@
             location.reload();
         }
 
-        // --- ENHANCED CAMERA SCANNER DENGAN REAR CAMERA LOCK & ZOOM ---
+        // --- CAMERA SCANNER: HIGH-RESOLUTION + CONTINUOUS AUTOFOCUS + NATIVE ZOOM ---
         async function startCameraScanner() {
             const container = document.getElementById('camera-container');
+            const videoEl = document.getElementById('interactive');
+            const zoomRange = document.getElementById('zoom-range');
+
             container.classList.remove('hidden');
-            document.getElementById('zoom-range').value = 1;
+            zoomRange.value = 1;
             document.getElementById('zoom-val').innerText = '1.0x';
 
+            // Tutup scanner sebelumnya agar tidak ada stream yang bentrok.
+            if (codeReader) {
+                try { codeReader.reset(); } catch (e) {}
+            }
+
             codeReader = new ZXing.BrowserBarcodeReader();
+
+            // Minta kamera belakang dengan resolusi tinggi.
+            // facingMode "environment" lebih konsisten daripada memilih device label,
+            // terutama di Android karena label kamera sering kosong sebelum permission diberikan.
+            const constraints = {
+                audio: false,
+                video: {
+                    facingMode: { ideal: 'environment' },
+                    width: { ideal: 1920, min: 1280 },
+                    height: { ideal: 1080, min: 720 },
+                    frameRate: { ideal: 30, min: 15 },
+                    focusMode: { ideal: 'continuous' }
+                }
+            };
+
             try {
-                const videoInputDevices = await codeReader.listVideoInputDevices();
-                // Pilih kamera belakang jika tersedia
-                let selectedDeviceId = videoInputDevices[0].deviceId;
-                for (const device of videoInputDevices) {
-                    if (/back|rear|environment|utama/i.test(device.label)) {
-                        selectedDeviceId = device.deviceId;
-                        break;
+                await codeReader.decodeFromConstraints(
+                    constraints,
+                    videoEl,
+                    (result, err) => {
+                        if (result) {
+                            document.getElementById('input-barcode').value = result.text;
+                            stopCameraScanner();
+                            processSearchProduct();
+                        }
+                    }
+                );
+
+                // Ambil track yang benar-benar dipakai browser.
+                if (videoEl.srcObject) {
+                    activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
+
+                    if (activeVideoTrack) {
+                        const capabilities = activeVideoTrack.getCapabilities
+                            ? activeVideoTrack.getCapabilities()
+                            : {};
+
+                        // Coba aktifkan continuous autofocus.
+                        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+                            try {
+                                await activeVideoTrack.applyConstraints({
+                                    advanced: [{ focusMode: 'continuous' }]
+                                });
+                            } catch (e) {
+                                console.log('Continuous autofocus tidak didukung:', e);
+                            }
+                        }
+
+                        // Atur slider berdasarkan kemampuan zoom kamera.
+                        if (capabilities.zoom) {
+                            const minZoom = Number(capabilities.zoom.min ?? 1);
+                            const maxZoom = Number(capabilities.zoom.max ?? 3);
+                            const step = Number(capabilities.zoom.step ?? 0.1);
+
+                            zoomRange.min = minZoom;
+                            zoomRange.max = maxZoom;
+                            zoomRange.step = step;
+                            zoomRange.value = minZoom;
+
+                            document.getElementById('zoom-val').innerText =
+                                `${minZoom.toFixed(1)}x`;
+                        } else {
+                            zoomRange.min = 1;
+                            zoomRange.max = 3;
+                            zoomRange.step = 0.1;
+                        }
                     }
                 }
 
-                codeReader.decodeFromVideoDevice(selectedDeviceId, 'interactive', (result, err) => {
-                    if (result) {
-                        document.getElementById('input-barcode').value = result.text;
-                        stopCameraScanner();
-                        processSearchProduct();
-                    }
-                }).then(() => {
-                    const videoEl = document.getElementById('interactive');
-                    if (videoEl && videoEl.srcObject) {
+            } catch (e) {
+                console.warn('Kamera resolusi tinggi gagal, mencoba kamera default:', e);
+
+                try {
+                    // Fallback jika browser/perangkat menolak constraints di atas.
+                    await codeReader.decodeFromVideoDevice(
+                        null,
+                        videoEl,
+                        (result, err) => {
+                            if (result) {
+                                document.getElementById('input-barcode').value = result.text;
+                                stopCameraScanner();
+                                processSearchProduct();
+                            }
+                        }
+                    );
+
+                    if (videoEl.srcObject) {
                         activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
                     }
-                });
-            } catch (e) {
-                console.warn("Fallback default camera:", e);
-                codeReader.decodeFromVideoDevice(null, 'interactive', (result, err) => {
-                    if (result) {
-                        document.getElementById('input-barcode').value = result.text;
-                        stopCameraScanner();
-                        processSearchProduct();
-                    }
-                });
+                } catch (fallbackError) {
+                    console.error('Kamera tidak dapat dibuka:', fallbackError);
+                    alert('Kamera tidak dapat dibuka. Pastikan izin kamera sudah diberikan pada browser.');
+                    stopCameraScanner();
+                }
             }
         }
 
         function adjustCameraZoom(val) {
-            document.getElementById('zoom-val').innerText = `${parseFloat(val).toFixed(1)}x`;
-            if (activeVideoTrack) {
-                const capabilities = activeVideoTrack.getCapabilities();
+            const zoom = parseFloat(val);
+            document.getElementById('zoom-val').innerText = `${zoom.toFixed(1)}x`;
+
+            if (!activeVideoTrack) return;
+
+            try {
+                const capabilities = activeVideoTrack.getCapabilities
+                    ? activeVideoTrack.getCapabilities()
+                    : {};
+
                 if (capabilities.zoom) {
+                    const min = Number(capabilities.zoom.min ?? 1);
+                    const max = Number(capabilities.zoom.max ?? 3);
+                    const safeZoom = Math.min(max, Math.max(min, zoom));
+
                     activeVideoTrack.applyConstraints({
-                        advanced: [{ zoom: parseFloat(val) }]
-                    }).catch(err => console.log("Zoom not fully supported by device hardware", err));
+                        advanced: [{ zoom: safeZoom }]
+                    }).catch(err => {
+                        console.log('Native zoom tidak didukung penuh:', err);
+                    });
                 }
+            } catch (err) {
+                console.log('Tidak bisa membaca kemampuan zoom kamera:', err);
             }
         }
 
         function stopCameraScanner() {
             if (codeReader) {
-                codeReader.reset();
+                try { codeReader.reset(); } catch (e) {}
             }
+
+            // reset() biasanya menghentikan stream ZXing, tetapi kita juga
+            // hentikan track secara eksplisit agar kamera benar-benar mati.
+            const videoEl = document.getElementById('interactive');
+            if (videoEl && videoEl.srcObject) {
+                videoEl.srcObject.getTracks().forEach(track => track.stop());
+                videoEl.srcObject = null;
+            }
+
             activeVideoTrack = null;
             document.getElementById('camera-container').classList.add('hidden');
         }
@@ -770,12 +869,35 @@
                 });
 
                 const element = document.getElementById('pdf-export-area');
+
+                // Pastikan browser menyelesaikan layout sebelum html2canvas mengambil snapshot.
+                // Kontainer sudah 190mm karena margin PDF = 10mm kiri/kanan.
+                element.style.width = '190mm';
+                element.style.minHeight = '277mm';
+                element.style.boxSizing = 'border-box';
+                element.style.overflow = 'hidden';
+
                 const opt = {
-                        margin:       5,
-                        filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
-                        image:        { type: 'jpeg', quality: 0.98 },
-                        html2canvas:  { scale: 2, useCORS: true, scrollY: 0, letterRendering: true },
-                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
+                    margin:       [10, 10, 10, 10],
+                    filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  {
+                        scale: 2,
+                        useCORS: true,
+                        scrollY: 0,
+                        backgroundColor: '#ffffff',
+                        logging: false
+                    },
+                    jsPDF:        {
+                        unit: 'mm',
+                        format: 'a4',
+                        orientation: 'portrait',
+                        compress: true
+                    },
+                    pagebreak: {
+                        mode: ['css', 'legacy'],
+                        avoid: ['tr']
+                    }
                 };
 
                 html2pdf().from(element).set(opt).save();
