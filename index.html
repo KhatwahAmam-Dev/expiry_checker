@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Store Expiry & Return Intelligence - CS77</title>
+    <title>Store Expiry & Return Intelligence - AM024</title>
     <!-- Tailwind CSS CDN -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome untuk Ikon Modern -->
@@ -52,7 +52,7 @@
                 <span id="badge-crew" class="font-medium">Crew A</span>
                 <span class="text-indigo-400">|</span>
                 <span id="badge-rak" class="text-indigo-200">-</span>
-                <button onclick="logoutSession()" class="text-rose-300 hover:text-rose-100 ml-2" title="Keluar"><i class="fa-solid fa-power-off"></i></button>
+                <button onclick="resetWorkSession()" class="text-rose-300 hover:text-rose-100 ml-2" title="Selesai & Reset Sesi"><i class="fa-solid fa-rotate-right"></i></button>
             </div>
         </div>
     </header>
@@ -120,9 +120,15 @@
                     <button onclick="openChangeShelvingModal()" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg font-medium transition text-slate-700 border border-slate-300">
                         <i class="fa-solid fa-arrows-rotate mr-1"></i> Pindah Rak / Shelving
                     </button>
+                    <button onclick="resetWorkSession()" class="text-xs bg-rose-50 hover:bg-rose-100 text-rose-700 px-3 py-2 rounded-lg font-medium transition border border-rose-200">
+                        <i class="fa-solid fa-rotate-right mr-1"></i> Selesai & Reset
+                    </button>
                 </div>
                 <div class="flex items-center space-x-2">
                     <span id="data-source-status" class="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">Online Mode</span>
+                    <span id="draft-status" class="text-xs px-2.5 py-1 rounded-full bg-sky-100 text-sky-800 font-medium" title="Data pekerjaan disimpan sementara di perangkat">
+                        <i class="fa-solid fa-cloud-arrow-up mr-1"></i> Auto-Save Aktif
+                    </span>
                     <label class="cursor-pointer text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-2 rounded-lg font-medium transition border border-amber-200">
                         <i class="fa-solid fa-file-arrow-up mr-1"></i> Upload Master JSON/CSV
                         <input type="file" id="local-json-upload" accept=".json,.csv" class="hidden" onchange="handleLocalDataUpload(event)">
@@ -403,6 +409,117 @@
         let codeReader = null;
         let activeVideoTrack = null;
 
+        // --- PENYIMPANAN SEMENTARA SESI ---
+        // localStorage dipakai agar data tetap ada walaupun tab/browser tertutup.
+        // Data akan dihapus ketika pengguna menekan "Selesai & Reset".
+        const WORK_SESSION_KEY = 'expiryChecker_AM024_work_session_v1';
+
+        function saveWorkSession() {
+            try {
+                const payload = {
+                    version: 1,
+                    savedAt: new Date().toISOString(),
+                    sessionState: { ...sessionState },
+                    scannedRecords: scannedRecords.map(record => ({ ...record }))
+                };
+                localStorage.setItem(WORK_SESSION_KEY, JSON.stringify(payload));
+            } catch (error) {
+                console.warn('Gagal menyimpan sesi sementara:', error);
+            }
+        }
+
+        function hasSavedWorkSession() {
+            try {
+                const raw = localStorage.getItem(WORK_SESSION_KEY);
+                if (!raw) return false;
+                const saved = JSON.parse(raw);
+                return !!(
+                    saved &&
+                    saved.sessionState &&
+                    saved.sessionState.username &&
+                    saved.sessionState.rak &&
+                    saved.sessionState.shelving
+                );
+            } catch (error) {
+                console.warn('Data sesi tersimpan tidak valid:', error);
+                return false;
+            }
+        }
+
+        function restoreWorkSession() {
+            try {
+                const raw = localStorage.getItem(WORK_SESSION_KEY);
+                if (!raw) return false;
+
+                const saved = JSON.parse(raw);
+                if (!saved || !saved.sessionState) return false;
+
+                sessionState = {
+                    username: saved.sessionState.username || '',
+                    rak: saved.sessionState.rak || '',
+                    shelving: saved.sessionState.shelving || ''
+                };
+
+                scannedRecords = Array.isArray(saved.scannedRecords)
+                    ? saved.scannedRecords
+                    : [];
+
+                document.getElementById('badge-crew').innerText = sessionState.username;
+                document.getElementById('lbl-rak').innerText = sessionState.rak;
+                document.getElementById('lbl-shelving').innerText = sessionState.shelving;
+                document.getElementById('badge-rak').innerText =
+                    `Rak: ${sessionState.rak} (Sh. ${sessionState.shelving})`;
+
+                document.getElementById('view-login').classList.add('hidden');
+                document.getElementById('view-setup').classList.add('hidden');
+                document.getElementById('view-dashboard').classList.remove('hidden');
+                document.getElementById('view-dashboard').classList.add('flex');
+                document.getElementById('user-session-badge').classList.remove('hidden');
+
+                renderTable();
+
+                const savedTime = saved.savedAt
+                    ? new Date(saved.savedAt).toLocaleString('id-ID')
+                    : '';
+                console.info(`Sesi kerja dipulihkan${savedTime ? `: ${savedTime}` : ''}.`);
+
+                return true;
+            } catch (error) {
+                console.warn('Gagal memulihkan sesi:', error);
+                return false;
+            }
+        }
+
+        function resetWorkSession() {
+            const totalItems = scannedRecords.reduce((sum, item) => sum + (Number(item.qty) || 0), 0);
+
+            const message = totalItems > 0
+                ? `Selesaikan pekerjaan dan hapus sementara ${scannedRecords.length} produk (${totalItems} qty) dari perangkat ini?\\n\\nPastikan Excel/PDF sudah diexport jika masih diperlukan.`
+                : 'Selesaikan pekerjaan dan kembali ke sesi awal?';
+
+            if (!confirm(message)) return;
+
+            stopCameraScanner();
+            localStorage.removeItem(WORK_SESSION_KEY);
+
+            scannedRecords = [];
+            sessionState = {
+                username: '',
+                rak: '',
+                shelving: ''
+            };
+
+            location.reload();
+        }
+
+        // Tetap dipertahankan sebagai alias untuk kompatibilitas dengan kode lama.
+        function logoutSession() {
+            resetWorkSession();
+        }
+
+        // Simpan otomatis jika halaman akan ditutup/reload.
+        window.addEventListener('beforeunload', saveWorkSession);
+
         async function loadMasterData() {
             const onlineUrl = "https://raw.githubusercontent.com/CahSragen77/masterDataJson/main/ms_item.json";
             try {
@@ -426,7 +543,13 @@
         }
 
         window.addEventListener('DOMContentLoaded', () => {
+            const restored = restoreWorkSession();
             loadMasterData();
+
+            if (restored) {
+                // renderTable() sudah dipanggil saat restore.
+                console.info('Draft pekerjaan sebelumnya berhasil dipulihkan.');
+            }
         });
 
         function handleLogin(e) {
@@ -438,6 +561,7 @@
             document.getElementById('view-login').classList.add('hidden');
             document.getElementById('view-setup').classList.remove('hidden');
             document.getElementById('user-session-badge').classList.remove('hidden');
+            saveWorkSession();
         }
 
         function handleSetup(e) {
@@ -452,6 +576,7 @@
             document.getElementById('view-setup').classList.add('hidden');
             document.getElementById('view-dashboard').classList.remove('hidden');
             document.getElementById('view-dashboard').classList.add('flex');
+            saveWorkSession();
         }
 
         function handleLocalDataUpload(e) {
@@ -570,6 +695,7 @@
             };
 
             scannedRecords.push(record);
+            saveWorkSession();
             closeProductModal();
             renderTable();
         }
@@ -628,6 +754,7 @@
 
         function deleteRecord(index) {
             scannedRecords.splice(index, 1);
+            saveWorkSession();
             renderTable();
         }
 
@@ -646,6 +773,7 @@
             document.getElementById('lbl-rak').innerText = sessionState.rak;
             document.getElementById('lbl-shelving').innerText = sessionState.shelving;
             document.getElementById('badge-rak').innerText = `Rak: ${sessionState.rak} (Sh. ${sessionState.shelving})`;
+            saveWorkSession();
             closeChangeShelvingModal();
         }
 
