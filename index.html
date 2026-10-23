@@ -327,35 +327,35 @@
         </div>
     </div>
 
-    !-- HIDDEN EXPORT PDF CONTAINER (FIXED WIDTH & MARGIN) -->
+    <!-- HIDDEN EXPORT PDF CONTAINER (FIXED RENDERING & MARGIN A4) -->
     <div style="position: absolute; left: -9999px; top: 0; width: 210mm;">
-        <div id="pdf-export-area" class="p-5 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; box-sizing: border-box;">
-            <div class="border-b-2 border-slate-800 pb-2 mb-3 flex justify-between items-end">
+    <div id="pdf-export-area" class="p-5 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; box-sizing: border-box;">
+            <div class="border-b-2 border-slate-800 pb-3 mb-4 flex justify-between items-end">
                 <div>
-                    <h2 class="text-lg font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
-                    <p class="text-[10px] text-slate-500">Store Code: AM024 | Manajemen Kelayakan Produk Pajangan</p>
+                    <h2 class="text-xl font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
+                    <p class="text-[11px] text-slate-500">Store Code: AM024 | Manajemen Kelayakan Produk Pajangan</p>
                 </div>
-                <div class="text-right text-[10px]">
+                <div class="text-right text-[11px]">
                     <p><strong>Tanggal Cetak:</strong> <span id="pdf-print-date"></span></p>
                     <p><strong>Petugas:</strong> <span id="pdf-print-crew"></span></p>
                 </div>
             </div>
 
-            <div class="mb-3 bg-slate-50 p-2 rounded border border-slate-200 text-[11px] flex justify-between">
+            <div class="mb-4 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs flex justify-between">
                 <div><strong>Rak Aktif:</strong> <span id="pdf-print-rak">-</span></div>
                 <div><strong>Shelving No:</strong> <span id="pdf-print-shelving">-</span></div>
                 <div><strong>Total Item:</strong> <span id="pdf-print-total">0</span></div>
             </div>
 
-            <table class="w-full border-collapse border border-slate-400 text-[10px] mb-4">
+            <table class="w-full border-collapse border border-slate-400 text-[11px] mb-6">
                 <thead>
                     <tr class="bg-slate-200 text-slate-900 text-center">
-                        <th class="border border-slate-400 p-1 w-8">No</th>
-                        <th class="border border-slate-400 p-1 w-28">Barcode Visual</th>
-                        <th class="border border-slate-400 p-1">PLU & Deskripsi Barang</th>
-                        <th class="border border-slate-400 p-1 w-20">Exp Date</th>
-                        <th class="border border-slate-400 p-1 w-24">Batas Tarik</th>
-                        <th class="border border-slate-400 p-1 w-10">Qty</th>
+                        <th class="border border-slate-400 p-1.5 w-10">No</th>
+                        <th class="border border-slate-400 p-1.5 w-32">Barcode Visual</th>
+                        <th class="border border-slate-400 p-1.5">PLU & Deskripsi Barang</th>
+                        <th class="border border-slate-400 p-1.5 w-24">Exp Date</th>
+                        <th class="border border-slate-400 p-1.5 w-28">Batas Tarik</th>
+                        <th class="border border-slate-400 p-1.5 w-12">Qty</th>
                     </tr>
                 </thead>
                 <tbody id="pdf-table-body">
@@ -363,13 +363,13 @@
                 </tbody>
             </table>
 
-            <div class="flex justify-between items-end mt-8 pt-4 border-t border-slate-300 text-[11px]">
+            <div class="flex justify-between items-end mt-12 pt-6 border-t border-slate-300 text-xs page-break-inside-avoid">
                 <div>
-                    <p class="mb-8">Mengetahui / Kepala Toko,</p>
+                    <p class="mb-10">Mengetahui / Kepala Toko,</p>
                     <p class="font-bold underline">( ........................................ )</p>
                 </div>
                 <div class="text-right">
-                    <p class="mb-8">Petugas Pemeriksa (<span id="pdf-print-crew-sign">Crew A</span>),</p>
+                    <p class="mb-10">Petugas Pemeriksa (<span id="pdf-print-crew-sign">Crew A</span>),</p>
                     <p class="font-bold underline">( <span id="pdf-print-crew-name">Crew A</span> )</p>
                 </div>
             </div>
@@ -771,11 +771,11 @@
 
                 const element = document.getElementById('pdf-export-area');
                 const opt = {
-                    margin:       [10, 10, 10, 10],
-                    filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
-                    image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
-                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                        margin:       5,
+                        filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
+                        image:        { type: 'jpeg', quality: 0.98 },
+                        html2canvas:  { scale: 2, useCORS: true, scrollY: 0, letterRendering: true },
+                        jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait', compress: true }
                 };
 
                 html2pdf().from(element).set(opt).save();
