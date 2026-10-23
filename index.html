@@ -31,7 +31,6 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
         body { font-family: 'Inter', sans-serif; }
-        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
     </style>
 </head>
 <body class="h-full bg-slate-100 text-slate-800 flex flex-col antialiased">
@@ -72,8 +71,8 @@
             </div>
             <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
                 <div>
-                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Username</label>
-                    <input type="text" id="login-user" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Crew A">
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Username / Nama Petugas</label>
+                    <input type="text" id="login-user" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Yudi Wiranto">
                 </div>
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Password</label>
@@ -115,8 +114,8 @@
             <!-- TOP BAR INFO & CONTROLS -->
             <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
                 <div class="flex items-center space-x-4">
-                    <div class="bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg">
-                        <i class="fa-solid fa-location-dot"></i> Rak: <span id="lbl-rak" class="font-bold"></span> | Shelving: <span id="lbl-shelving" class="font-bold"></span>
+                    <div class="bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg text-xs font-medium">
+                        <i class="fa-solid fa-location-dot mr-1"></i> Rak: <span id="lbl-rak" class="font-bold"></span> | Shelving: <span id="lbl-shelving" class="font-bold"></span>
                     </div>
                     <button onclick="openChangeShelvingModal()" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg font-medium transition text-slate-700 border border-slate-300">
                         <i class="fa-solid fa-arrows-rotate mr-1"></i> Pindah Rak / Shelving
@@ -149,22 +148,35 @@
                                     </button>
                                 </div>
                             </div>
-                            <button onclick="startCameraScanner()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg text-sm font-medium transition flex items-center justify-center space-x-2">
+                            <button onclick="startCameraScanner()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2.5 rounded-lg text-sm font-medium transition flex items-center justify-center space-x-2 shadow-sm">
                                 <i class="fa-solid fa-camera"></i>
-                                <span>Buka Kamera Scanner</span>
+                                <span>Buka Kamera (Macro Focus & Zoom)</span>
                             </button>
                         </div>
                     </div>
                     <div class="mt-4 text-xs text-slate-400">
-                        *Mendukung kamera HP jernih & bersih untuk pembacaan barcode instan.
+                        *Tips Barcode Kecil/Rapat: Gunakan fitur Zoom di kamera agar barcode terbaca instan.
                     </div>
                 </div>
 
                 <!-- Live Camera View Modal / Container (Hidden by default) -->
-                <div id="camera-container" class="hidden md:col-span-2 bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
-                    <video id="interactive" class="w-full h-48 object-cover rounded-lg"></video>
-                    <button onclick="stopCameraScanner()" class="absolute top-4 right-4 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-lg text-xs font-semibold">Tutup Kamera</button>
-                    <p class="text-xs text-slate-300 mt-2">Arahkan kamera ke barcode produk...</p>
+                <div id="camera-container" class="hidden md:col-span-2 bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden shadow-inner">
+                    <div class="w-full flex justify-between items-center mb-2 px-2 text-white text-xs">
+                        <span class="font-semibold text-emerald-400"><i class="fa-solid fa-circle-dot animate-pulse mr-1"></i> Kamera Belakang Aktif (Macro Zoom Ready)</span>
+                        <button onclick="stopCameraScanner()" class="bg-rose-600 hover:bg-rose-700 px-3 py-1 rounded-md text-xs font-semibold">Tutup Kamera</button>
+                    </div>
+                    <div class="relative w-full h-56 bg-black rounded-lg overflow-hidden flex items-center justify-center">
+                        <video id="interactive" class="w-full h-full object-cover"></video>
+                        <!-- Garis Fokus Scanner -->
+                        <div class="absolute inset-x-4 h-0.5 bg-rose-500 animate-pulse"></div>
+                    </div>
+                    <!-- Zoom Slider Controller untuk Barcode Kecil -->
+                    <div class="w-full mt-3 px-2 flex items-center space-x-3 text-white text-xs">
+                        <span>Zoom:</span>
+                        <input type="range" id="zoom-range" min="1" max="3" step="0.1" value="1" class="w-full accent-indigo-500 cursor-pointer" oninput="adjustCameraZoom(this.value)">
+                        <span id="zoom-val" class="font-bold w-8 text-right">1.0x</span>
+                    </div>
+                    <p class="text-[11px] text-slate-300 mt-2">Geser slider zoom jika barcode produk (rokok/snack) berukuran kecil dan rapat.</p>
                 </div>
 
                 <!-- Quick Stats / Summary Card -->
@@ -219,7 +231,6 @@
                             </tr>
                         </thead>
                         <tbody id="scanned-items-body" class="divide-y divide-slate-200">
-                            <!-- Dynamic Content -->
                             <tr>
                                 <td colspan="9" class="text-center py-8 text-slate-400">Belum ada produk yang di-scan pada sesi ini.</td>
                             </tr>
@@ -259,7 +270,7 @@
         </div>
     </div>
 
-    <!-- MODAL MANUAL MASTER ADDITION (JIKA BARANG TIDAK DITEMUKAN) -->
+    <!-- MODAL MANUAL MASTER ADDITION -->
     <div id="modal-manual-master" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
         <div class="bg-white max-w-lg w-full rounded-2xl shadow-2xl p-6 border border-slate-100">
             <div class="flex items-center space-x-3 mb-4 text-amber-600">
@@ -285,7 +296,7 @@
                 </div>
                 <div>
                     <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Retur Hari (r_h)</label>
-                    <input type="text" id="manual-returh" value="R_H-90 DAYS" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: R_H-90 DAYS atau 0">
+                    <input type="text" id="manual-returh" value="R_H-90 DAYS" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: R_H-90 DAYS">
                 </div>
                 <div class="flex space-x-3 pt-2">
                     <button type="button" onclick="closeManualMasterModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm">Batal</button>
@@ -316,49 +327,51 @@
         </div>
     </div>
 
-    <!-- HIDDEN EXPORT PDF CONTAINER (FORMAT RESMI) -->
-    <div id="pdf-export-area" class="hidden p-8 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; margin: auto;">
-        <div class="border-b-2 border-slate-800 pb-4 mb-6 flex justify-between items-end">
-            <div>
-                <h2 class="text-2xl font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
-                <p class="text-xs text-slate-500">Store Code: AM024 | Manajemen Kelayakan Produk Pajangan</p>
+    <!-- HIDDEN EXPORT PDF CONTAINER (FIXED RENDERING & MARGIN A4) -->
+    <div style="position: absolute; left: -9999px; top: 0; width: 210mm;">
+        <div id="pdf-export-area" class="p-8 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; box-sizing: border-box;">
+            <div class="border-b-2 border-slate-800 pb-3 mb-4 flex justify-between items-end">
+                <div>
+                    <h2 class="text-xl font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
+                    <p class="text-[11px] text-slate-500">Store Code: AM024 | Manajemen Kelayakan Produk Pajangan</p>
+                </div>
+                <div class="text-right text-[11px]">
+                    <p><strong>Tanggal Cetak:</strong> <span id="pdf-print-date"></span></p>
+                    <p><strong>Petugas:</strong> <span id="pdf-print-crew"></span></p>
+                </div>
             </div>
-            <div class="text-right text-xs">
-                <p><strong>Tanggal Cetak:</strong> <span id="pdf-print-date"></span></p>
-                <p><strong>Petugas:</strong> <span id="pdf-print-crew"></span></p>
+
+            <div class="mb-4 bg-slate-50 p-2.5 rounded-lg border border-slate-200 text-xs flex justify-between">
+                <div><strong>Rak Aktif:</strong> <span id="pdf-print-rak">-</span></div>
+                <div><strong>Shelving No:</strong> <span id="pdf-print-shelving">-</span></div>
+                <div><strong>Total Item:</strong> <span id="pdf-print-total">0</span></div>
             </div>
-        </div>
 
-        <div class="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs flex justify-between">
-            <div><strong>Rak Aktif:</strong> <span id="pdf-print-rak">-</span></div>
-            <div><strong>Shelving No:</strong> <span id="pdf-print-shelving">-</span></div>
-            <div><strong>Total Item:</strong> <span id="pdf-print-total">0</span></div>
-        </div>
+            <table class="w-full border-collapse border border-slate-400 text-[11px] mb-6">
+                <thead>
+                    <tr class="bg-slate-200 text-slate-900 text-center">
+                        <th class="border border-slate-400 p-1.5 w-10">No</th>
+                        <th class="border border-slate-400 p-1.5 w-32">Barcode Visual</th>
+                        <th class="border border-slate-400 p-1.5">PLU & Deskripsi Barang</th>
+                        <th class="border border-slate-400 p-1.5 w-24">Exp Date</th>
+                        <th class="border border-slate-400 p-1.5 w-28">Batas Tarik</th>
+                        <th class="border border-slate-400 p-1.5 w-12">Qty</th>
+                    </tr>
+                </thead>
+                <tbody id="pdf-table-body">
+                    <!-- Dynamic PDF Rows -->
+                </tbody>
+            </table>
 
-        <table class="w-full border-collapse border border-slate-400 text-xs mb-8">
-            <thead>
-                <tr class="bg-slate-200 text-slate-900 text-center">
-                    <th class="border border-slate-400 p-2">No</th>
-                    <th class="border border-slate-400 p-2">Barcode Visual</th>
-                    <th class="border border-slate-400 p-2">PLU & Deskripsi Barang</th>
-                    <th class="border border-slate-400 p-2">Exp Date</th>
-                    <th class="border border-slate-400 p-2">Batas Tarik Retur</th>
-                    <th class="border border-slate-400 p-2">Qty</th>
-                </tr>
-            </thead>
-            <tbody id="pdf-table-body">
-                <!-- Dynamic PDF Rows -->
-            </tbody>
-        </table>
-
-        <div class="flex justify-between items-end mt-16 pt-8 border-t border-slate-300 text-xs">
-            <div>
-                <p class="mb-12">Mengetahui / Kepala Toko,</p>
-                <p class="font-bold underline">( ........................................ )</p>
-            </div>
-            <div class="text-right">
-                <p class="mb-12">Petugas Pemeriksa (<span id="pdf-print-crew-sign">Crew A</span>),</p>
-                <p class="font-bold underline">( <span id="pdf-print-crew-name">Crew A</span> )</p>
+            <div class="flex justify-between items-end mt-12 pt-6 border-t border-slate-300 text-xs page-break-inside-avoid">
+                <div>
+                    <p class="mb-10">Mengetahui / Kepala Toko,</p>
+                    <p class="font-bold underline">( ........................................ )</p>
+                </div>
+                <div class="text-right">
+                    <p class="mb-10">Petugas Pemeriksa (<span id="pdf-print-crew-sign">Crew A</span>),</p>
+                    <p class="font-bold underline">( <span id="pdf-print-crew-name">Crew A</span> )</p>
+                </div>
             </div>
         </div>
     </div>
@@ -373,8 +386,8 @@
             shelving: ''
         };
         let codeReader = null;
+        let activeVideoTrack = null;
 
-        // Inisialisasi Data Master (GitHub Online atau Fallback Local)
         async function loadMasterData() {
             const onlineUrl = "https://raw.githubusercontent.com/CahSragen77/masterDataJson/main/ms_item.json";
             try {
@@ -384,14 +397,13 @@
                 document.getElementById('data-source-status').innerText = "Online Mode (GitHub Connected)";
                 document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium";
             } catch (error) {
-                console.warn("Gagal terhubung ke GitHub online, menggunakan data embedded / fallback:", error);
-                // Fallback Embedded Data contoh sesuai prompt Anda
+                console.warn("Menggunakan data fallback offline:", error);
                 masterData = [
                   {"kd_store":"AM024","plu":"20420135","descp":"KODOMO FOAMING SHAMPOO ORANGE PUMP 250ML","barcode":"8998866107754","retur_h":"R_H-90 DAYS"},
                   {"kd_store":"AM024","plu":"40510841","descp":"THANKFUL MASKER EARLOOP ADULT 5S","barcode":"8997029809719","retur_h":"R_H-90 DAYS"},
                   {"kd_store":"AM024","plu":"10320211","descp":"DEL MONTE SAUCE TOMAT PET 135ML","barcode":"8998888710161","retur_h":"R_H-120 DAYS"},
-                  {"kd_store":"AM024","plu":"10620961","descp":"GLICO POCKY MATCHA BOX 33GR","barcode":"8990044000048","retur_h":"RH-90"},
-                  {"kd_store":"AM024","plu":"20110111","descp":"PANADOL EXTRA 10S","barcode":"8992695110206","retur_h":"R_H-90 DAYS"}
+                  {"kd_store":"AM024","plu":"10810144","descp":"JAZY KRETEK APPLE 12","barcode":"8993996611263","retur_h":"R_H-90 DAYS"},
+                  {"kd_store":"AM024","plu":"10320177","descp":"INDOFOOD SAMBAL PEDAS PET 135ML","barcode":"089686400427","retur_h":"R_H-90 DAYS"}
                 ];
                 document.getElementById('data-source-status').innerText = "Offline Mode / Fallback Active";
                 document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-medium";
@@ -402,7 +414,6 @@
             loadMasterData();
         });
 
-        // Handler Login Hardcore
         function handleLogin(e) {
             e.preventDefault();
             const user = document.getElementById('login-user').value.trim();
@@ -414,7 +425,6 @@
             document.getElementById('user-session-badge').classList.remove('hidden');
         }
 
-        // Handler Setup Rak & Shelving
         function handleSetup(e) {
             e.preventDefault();
             sessionState.rak = document.getElementById('setup-rak').value.trim();
@@ -429,7 +439,6 @@
             document.getElementById('view-dashboard').classList.add('flex');
         }
 
-        // Upload local JSON/CSV
         function handleLocalDataUpload(e) {
             const file = e.target.files[0];
             if (!file) return;
@@ -437,17 +446,16 @@
             reader.onload = function(evt) {
                 try {
                     masterData = JSON.parse(evt.target.result);
-                    alert("Data master lokal berhasil diunggah dan disinkronkan!");
+                    alert("Data master lokal berhasil disinkronkan!");
                     document.getElementById('data-source-status').innerText = "Local Uploaded Mode";
                     document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-medium";
                 } catch (err) {
-                    alert("Format file JSON tidak valid.");
+                    alert("Format file tidak valid.");
                 }
             };
             reader.readAsText(file);
         }
 
-        // Proses Pencarian Barcode / PLU
         function processSearchProduct() {
             const query = document.getElementById('input-barcode').value.trim();
             if (!query) return;
@@ -455,7 +463,6 @@
             let product = masterData.find(item => item.barcode === query || item.plu === query);
 
             if (!product) {
-                // Jika tidak ketemu di master, minta persetujuan tambah manual
                 document.getElementById('manual-barcode').value = query;
                 document.getElementById('modal-manual-master').classList.remove('hidden');
                 return;
@@ -484,7 +491,6 @@
             document.getElementById('modal-manual-master').classList.add('hidden');
         }
 
-        // Submit Tambah Manual Master
         function submitManualMaster(e) {
             e.preventDefault();
             const newProd = {
@@ -499,7 +505,6 @@
             openProductModal(newProd);
         }
 
-        // Submit Data Pengecekan Produk & Hitung Logika Retur Matematika
         function submitProductDetails(e) {
             e.preventDefault();
             const barcode = document.getElementById('modal-hidden-barcode').value;
@@ -509,9 +514,7 @@
 
             const product = masterData.find(item => item.barcode === barcode);
             
-            // Logika Perhitungan Retur Hari (r_h) + Buffer 14 hari
-            // Contoh: r_h = -90 hari + buffer 14 hari = 104 hari sebelum exp date
-            let returDays = 90; // Default r_h = 0 dianggap 90 hari / 3 bulan
+            let returDays = 90;
             if (product && product.retur_h) {
                 let match = product.retur_h.match(/-(\d+)/);
                 if (match) {
@@ -524,13 +527,8 @@
             const expDate = new Date(expDateStr);
             const today = new Date();
             
-            // Hitung Tanggal Tarik Retur
             let tarikReturDate = new Date(expDate);
             tarikReturDate.setDate(tarikReturDate.getDate() - totalDaysBeforeExp);
-
-            // Sisa hari menuju tanggal tarik retur
-            const diffTime = tarikReturDate - today;
-            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
 
             let statusText = "Aman (Pajang)";
             let statusBadgeClass = "bg-emerald-100 text-emerald-800";
@@ -543,7 +541,6 @@
                 statusBadgeClass = "bg-amber-100 text-amber-800 font-bold";
             }
 
-            // Simpan record (duplikat dibiarkan baris terpisah sesuai rule)
             const record = {
                 lokasiRak: `${sessionState.rak} (Sh. ${sessionState.shelving})`,
                 barcode: product.barcode,
@@ -562,7 +559,6 @@
             renderTable();
         }
 
-        // Render Tabel Data Ter-scan
         function renderTable() {
             const tbody = document.getElementById('scanned-items-body');
             document.getElementById('table-count').innerText = `${scannedRecords.length} produk tercatat`;
@@ -603,7 +599,6 @@
                 tbody.appendChild(tr);
             });
 
-            // Generate Barcode Visual menggunakan JsBarcode
             setTimeout(() => {
                 document.querySelectorAll('.barcode-svg').forEach(svg => {
                     const code = svg.getAttribute('data-barcode');
@@ -621,7 +616,6 @@
             renderTable();
         }
 
-        // Pindah Rak Modal Controller
         function openChangeShelvingModal() {
             document.getElementById('update-rak').value = sessionState.rak;
             document.getElementById('update-shelving').value = sessionState.shelving;
@@ -644,28 +638,69 @@
             location.reload();
         }
 
-        // Kamera Barcode Scanner Integrasi ZXing
-        function startCameraScanner() {
+        // --- ENHANCED CAMERA SCANNER DENGAN REAR CAMERA LOCK & ZOOM ---
+        async function startCameraScanner() {
             const container = document.getElementById('camera-container');
             container.classList.remove('hidden');
+            document.getElementById('zoom-range').value = 1;
+            document.getElementById('zoom-val').innerText = '1.0x';
+
             codeReader = new ZXing.BrowserBarcodeReader();
-            codeReader.decodeFromVideoDevice(null, 'interactive', (result, err) => {
-                if (result) {
-                    document.getElementById('input-barcode').value = result.text;
-                    stopCameraScanner();
-                    processSearchProduct();
+            try {
+                const videoInputDevices = await codeReader.listVideoInputDevices();
+                // Pilih kamera belakang jika tersedia
+                let selectedDeviceId = videoInputDevices[0].deviceId;
+                for (const device of videoInputDevices) {
+                    if (/back|rear|environment|utama/i.test(device.label)) {
+                        selectedDeviceId = device.deviceId;
+                        break;
+                    }
                 }
-            }).catch(err => console.error(err));
+
+                codeReader.decodeFromVideoDevice(selectedDeviceId, 'interactive', (result, err) => {
+                    if (result) {
+                        document.getElementById('input-barcode').value = result.text;
+                        stopCameraScanner();
+                        processSearchProduct();
+                    }
+                }).then(() => {
+                    const videoEl = document.getElementById('interactive');
+                    if (videoEl && videoEl.srcObject) {
+                        activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
+                    }
+                });
+            } catch (e) {
+                console.warn("Fallback default camera:", e);
+                codeReader.decodeFromVideoDevice(null, 'interactive', (result, err) => {
+                    if (result) {
+                        document.getElementById('input-barcode').value = result.text;
+                        stopCameraScanner();
+                        processSearchProduct();
+                    }
+                });
+            }
+        }
+
+        function adjustCameraZoom(val) {
+            document.getElementById('zoom-val').innerText = `${parseFloat(val).toFixed(1)}x`;
+            if (activeVideoTrack) {
+                const capabilities = activeVideoTrack.getCapabilities();
+                if (capabilities.zoom) {
+                    activeVideoTrack.applyConstraints({
+                        advanced: [{ zoom: parseFloat(val) }]
+                    }).catch(err => console.log("Zoom not fully supported by device hardware", err));
+                }
+            }
         }
 
         function stopCameraScanner() {
             if (codeReader) {
                 codeReader.reset();
             }
+            activeVideoTrack = null;
             document.getElementById('camera-container').classList.add('hidden');
         }
 
-        // Export ke Excel
         function exportToExcel() {
             if (scannedRecords.length === 0) {
                 alert("Tidak ada data untuk diexport!");
@@ -690,7 +725,7 @@
             XLSX.writeFile(workbook, `Laporan_Expired_${sessionState.rak}_Sh${sessionState.shelving}.xlsx`);
         }
 
-        // Export ke PDF Form Resmi
+        // --- FIXED EXPORT PDF DENGAN RENDER DOM YANG PAS DI A4 ---
         function exportToPDF() {
             if (scannedRecords.length === 0) {
                 alert("Tidak ada data untuk diexport ke PDF!");
@@ -711,43 +746,39 @@
             scannedRecords.forEach((item, index) => {
                 pdfBody.innerHTML += `
                     <tr>
-                        <td class="border border-slate-400 p-2 text-center">${index + 1}</td>
-                        <td class="border border-slate-400 p-2 text-center"><svg class="pdf-barcode-svg" data-barcode="${item.barcode}"></svg></td>
-                        <td class="border border-slate-400 p-2">
+                        <td class="border border-slate-400 p-1.5 text-center">${index + 1}</td>
+                        <td class="border border-slate-400 p-1.5 text-center"><svg class="pdf-barcode-svg" data-barcode="${item.barcode}"></svg></td>
+                        <td class="border border-slate-400 p-1.5">
                             <div class="font-bold">${item.descp}</div>
-                            <div class="text-[10px] text-slate-500">PLU: ${item.plu} | Barcode: ${item.barcode}</div>
+                            <div class="text-[9px] text-slate-500">PLU: ${item.plu} | Barcode: ${item.barcode}</div>
                         </td>
-                        <td class="border border-slate-400 p-2 text-center font-semibold">${item.expDate}</td>
-                        <td class="border border-slate-400 p-2 text-center">${item.tarikDate} (${item.status})</td>
-                        <td class="border border-slate-400 p-2 text-center font-bold">${item.qty}</td>
+                        <td class="border border-slate-400 p-1.5 text-center font-semibold">${item.expDate}</td>
+                        <td class="border border-slate-400 p-1.5 text-center">${item.tarikDate}</td>
+                        <td class="border border-slate-400 p-1.5 text-center font-bold">${item.qty}</td>
                     </tr>
                 `;
             });
-
-            const area = document.getElementById('pdf-export-area');
-            area.classList.remove('hidden');
 
             setTimeout(() => {
                 document.querySelectorAll('.pdf-barcode-svg').forEach(svg => {
                     const code = svg.getAttribute('data-barcode');
                     if(code) {
                         try {
-                            JsBarcode(svg, code, { format: "CODE128", width: 1, height: 25, displayValue: true, fontSize: 9 });
+                            JsBarcode(svg, code, { format: "CODE128", width: 1, height: 20, displayValue: true, fontSize: 8 });
                         } catch(e){}
                     }
                 });
 
+                const element = document.getElementById('pdf-export-area');
                 const opt = {
-                    margin:       10,
+                    margin:       [10, 10, 10, 10],
                     filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
                     image:        { type: 'jpeg', quality: 0.98 },
-                    html2canvas:  { scale: 2, useCORS: true },
+                    html2canvas:  { scale: 2, useCORS: true, scrollY: 0 },
                     jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
                 };
 
-                html2pdf().from(area).set(opt).save().then(() => {
-                    area.classList.add('hidden');
-                });
+                html2pdf().from(element).set(opt).save();
             }, 300);
         }
     </script>
