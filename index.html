@@ -162,21 +162,31 @@
                 <!-- Live Camera View Modal / Container (Hidden by default) -->
                 <div id="camera-container" class="hidden md:col-span-2 bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden shadow-inner">
                     <div class="w-full flex justify-between items-center mb-2 px-2 text-white text-xs">
-                        <span class="font-semibold text-emerald-400"><i class="fa-solid fa-circle-dot animate-pulse mr-1"></i> Kamera Belakang Aktif (Macro Zoom Ready)</span>
+                        <div>
+                            <span class="font-semibold text-emerald-400"><i class="fa-solid fa-circle-dot animate-pulse mr-1"></i> Kamera Belakang • High Accuracy</span>
+                            <span id="scanner-status" class="block text-[10px] text-slate-300 mt-0.5">Mempersiapkan autofocus...</span>
+                        </div>
                         <button onclick="stopCameraScanner()" class="bg-rose-600 hover:bg-rose-700 px-3 py-1 rounded-md text-xs font-semibold">Tutup Kamera</button>
                     </div>
                     <div class="relative w-full h-56 bg-black rounded-lg overflow-hidden flex items-center justify-center">
-                        <video id="interactive" class="w-full h-full object-cover"></video>
-                        <!-- Garis Fokus Scanner -->
-                        <div class="absolute inset-x-4 h-0.5 bg-rose-500 animate-pulse"></div>
+                        <video id="interactive" class="w-full h-full object-cover" autoplay playsinline muted></video>
+                        <!-- Area target: membantu pengguna menempatkan barcode di area paling efektif -->
+                        <div class="absolute inset-x-8 top-1/2 -translate-y-1/2 h-20 border-2 border-rose-400/90 rounded-md pointer-events-none"></div>
+                        <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-1/2 h-0.5 bg-rose-500 animate-pulse pointer-events-none"></div>
                     </div>
-                    <!-- Zoom Slider Controller untuk Barcode Kecil -->
-                    <div class="w-full mt-3 px-2 flex items-center space-x-3 text-white text-xs">
+                    <!-- Kontrol kamera -->
+                    <div class="w-full mt-3 px-2 flex items-center gap-2 text-white text-xs">
                         <span>Zoom:</span>
-                        <input type="range" id="zoom-range" min="1" max="3" step="0.1" value="1" class="w-full accent-indigo-500 cursor-pointer" oninput="adjustCameraZoom(this.value)">
-                        <span id="zoom-val" class="font-bold w-8 text-right">1.0x</span>
+                        <input type="range" id="zoom-range" min="1" max="3" step="0.1" value="1" class="flex-1 accent-indigo-500 cursor-pointer" oninput="adjustCameraZoom(this.value)">
+                        <span id="zoom-val" class="font-bold w-10 text-right">1.0x</span>
+                        <button id="torch-btn" onclick="toggleCameraTorch()" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-1.5 rounded-md text-[11px] font-semibold" title="Lampu kamera">
+                            <i class="fa-solid fa-bolt"></i> Lampu
+                        </button>
+                        <button onclick="refocusCamera()" class="bg-slate-700 hover:bg-slate-600 px-2.5 py-1.5 rounded-md text-[11px] font-semibold" title="Paksa fokus ulang">
+                            <i class="fa-solid fa-crosshairs"></i> Fokus
+                        </button>
                     </div>
-                    <p class="text-[11px] text-slate-300 mt-2">Geser slider zoom jika barcode produk (rokok/snack) berukuran kecil dan rapat.</p>
+                    <p class="text-[11px] text-slate-300 mt-2">Untuk barcode kecil/rapat: dekatkan HP perlahan, aktifkan fokus, lalu naikkan zoom secukupnya. Hindari terlalu dekat agar barcode tetap tajam.</p>
                 </div>
 
                 <!-- Quick Stats / Summary Card -->
@@ -643,26 +653,118 @@
             location.reload();
         }
 
-        // --- CAMERA SCANNER: HIGH-RESOLUTION + CONTINUOUS AUTOFOCUS + NATIVE ZOOM ---
+        // --- CAMERA SCANNER: MULTI-FORMAT + TRY_HARDER + AUTOFOCUS + NATIVE ZOOM/TORCH ---
+        let torchEnabled = false;
+        let scannerBusy = false;
+
+        function setScannerStatus(text, good = false) {
+            const el = document.getElementById('scanner-status');
+            if (!el) return;
+            el.innerText = text;
+            el.className = good
+                ? 'block text-[10px] text-emerald-300 mt-0.5'
+                : 'block text-[10px] text-slate-300 mt-0.5';
+        }
+
+        async function applyBestFocus(track) {
+            if (!track || !track.getCapabilities) return false;
+            const caps = track.getCapabilities();
+            if (!caps.focusMode) return false;
+
+            try {
+                // Continuous = ideal untuk barcode yang bergerak/dipegang tangan.
+                if (caps.focusMode.includes('continuous')) {
+                    await track.applyConstraints({ advanced: [{ focusMode: 'continuous' }] });
+                    return true;
+                }
+                if (caps.focusMode.includes('single-shot')) {
+                    await track.applyConstraints({ advanced: [{ focusMode: 'single-shot' }] });
+                    return true;
+                }
+            } catch (e) {
+                console.log('Autofocus constraint tidak diterima:', e);
+            }
+            return false;
+        }
+
+        function configureZoomControl(track) {
+            const range = document.getElementById('zoom-range');
+            const label = document.getElementById('zoom-val');
+            if (!track || !track.getCapabilities) return;
+
+            const caps = track.getCapabilities();
+            if (caps.zoom) {
+                const min = Number(caps.zoom.min ?? 1);
+                const max = Number(caps.zoom.max ?? 3);
+                const step = Number(caps.zoom.step ?? 0.1);
+                range.min = min;
+                range.max = max;
+                range.step = step;
+                range.value = min;
+                label.innerText = `${min.toFixed(1)}x`;
+                range.disabled = false;
+            } else {
+                range.min = 1;
+                range.max = 1;
+                range.step = 0.1;
+                range.value = 1;
+                label.innerText = '1.0x';
+                range.disabled = true;
+            }
+        }
+
+        function configureTorchControl(track) {
+            const btn = document.getElementById('torch-btn');
+            if (!btn || !track || !track.getCapabilities) return;
+            const caps = track.getCapabilities();
+            btn.disabled = !caps.torch;
+            btn.classList.toggle('opacity-40', !caps.torch);
+            btn.title = caps.torch ? 'Nyalakan/matikan lampu kamera' : 'Lampu kamera tidak didukung perangkat ini';
+        }
+
         async function startCameraScanner() {
             const container = document.getElementById('camera-container');
             const videoEl = document.getElementById('interactive');
             const zoomRange = document.getElementById('zoom-range');
 
             container.classList.remove('hidden');
+            scannerBusy = false;
+            torchEnabled = false;
+            zoomRange.disabled = false;
             zoomRange.value = 1;
             document.getElementById('zoom-val').innerText = '1.0x';
+            setScannerStatus('Meminta kamera belakang dengan resolusi tinggi...');
 
-            // Tutup scanner sebelumnya agar tidak ada stream yang bentrok.
             if (codeReader) {
                 try { codeReader.reset(); } catch (e) {}
             }
 
-            codeReader = new ZXing.BrowserBarcodeReader();
+            // MultiFormatReader + TRY_HARDER lebih cocok untuk lingkungan retail
+            // karena barcode dapat berupa EAN/UPC/CODE128/ITF/CODE39, dll.
+            const hints = new Map();
+            if (ZXing.DecodeHintType && ZXing.DecodeHintType.TRY_HARDER) {
+                hints.set(ZXing.DecodeHintType.TRY_HARDER, true);
+            }
+            if (ZXing.DecodeHintType && ZXing.DecodeHintType.POSSIBLE_FORMATS && ZXing.BarcodeFormat) {
+                hints.set(ZXing.DecodeHintType.POSSIBLE_FORMATS, [
+                    ZXing.BarcodeFormat.EAN_13,
+                    ZXing.BarcodeFormat.EAN_8,
+                    ZXing.BarcodeFormat.UPC_A,
+                    ZXing.BarcodeFormat.UPC_E,
+                    ZXing.BarcodeFormat.CODE_128,
+                    ZXing.BarcodeFormat.CODE_39,
+                    ZXing.BarcodeFormat.ITF,
+                    ZXing.BarcodeFormat.CODABAR
+                ]);
+            }
 
-            // Minta kamera belakang dengan resolusi tinggi.
-            // facingMode "environment" lebih konsisten daripada memilih device label,
-            // terutama di Android karena label kamera sering kosong sebelum permission diberikan.
+            try {
+                codeReader = new ZXing.BrowserMultiFormatReader(hints, 120);
+            } catch (e) {
+                // Fallback library/browser compatibility.
+                codeReader = new ZXing.BrowserBarcodeReader();
+            }
+
             const constraints = {
                 audio: false,
                 video: {
@@ -670,83 +772,70 @@
                     width: { ideal: 1920, min: 1280 },
                     height: { ideal: 1080, min: 720 },
                     frameRate: { ideal: 30, min: 15 },
-                    focusMode: { ideal: 'continuous' }
+                    focusMode: { ideal: 'continuous' },
+                    resizeMode: { ideal: 'none' }
                 }
             };
 
-            try {
-                await codeReader.decodeFromConstraints(
-                    constraints,
-                    videoEl,
-                    (result, err) => {
-                        if (result) {
-                            document.getElementById('input-barcode').value = result.text;
-                            stopCameraScanner();
-                            processSearchProduct();
-                        }
-                    }
-                );
+            const onDetected = (result) => {
+                if (!result || scannerBusy) return;
+                scannerBusy = true;
 
-                // Ambil track yang benar-benar dipakai browser.
-                if (videoEl.srcObject) {
-                    activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
-
-                    if (activeVideoTrack) {
-                        const capabilities = activeVideoTrack.getCapabilities
-                            ? activeVideoTrack.getCapabilities()
-                            : {};
-
-                        // Coba aktifkan continuous autofocus.
-                        if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
-                            try {
-                                await activeVideoTrack.applyConstraints({
-                                    advanced: [{ focusMode: 'continuous' }]
-                                });
-                            } catch (e) {
-                                console.log('Continuous autofocus tidak didukung:', e);
-                            }
-                        }
-
-                        // Atur slider berdasarkan kemampuan zoom kamera.
-                        if (capabilities.zoom) {
-                            const minZoom = Number(capabilities.zoom.min ?? 1);
-                            const maxZoom = Number(capabilities.zoom.max ?? 3);
-                            const step = Number(capabilities.zoom.step ?? 0.1);
-
-                            zoomRange.min = minZoom;
-                            zoomRange.max = maxZoom;
-                            zoomRange.step = step;
-                            zoomRange.value = minZoom;
-
-                            document.getElementById('zoom-val').innerText =
-                                `${minZoom.toFixed(1)}x`;
-                        } else {
-                            zoomRange.min = 1;
-                            zoomRange.max = 3;
-                            zoomRange.step = 0.1;
-                        }
-                    }
+                const text = (result.text || '').trim();
+                if (!text) {
+                    scannerBusy = false;
+                    return;
                 }
 
+                setScannerStatus(`Barcode terbaca: ${text}`, true);
+                document.getElementById('input-barcode').value = text;
+                setTimeout(() => {
+                    stopCameraScanner();
+                    processSearchProduct();
+                }, 80);
+            };
+
+            try {
+                await codeReader.decodeFromConstraints(constraints, videoEl, (result, err) => {
+                    if (result) onDetected(result);
+                });
+
+                if (videoEl.srcObject) {
+                    activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
+                    if (activeVideoTrack) {
+                        videoEl.setAttribute('playsinline', 'true');
+                        videoEl.muted = true;
+                        videoEl.play().catch(() => {});
+
+                        const focused = await applyBestFocus(activeVideoTrack);
+                        configureZoomControl(activeVideoTrack);
+                        configureTorchControl(activeVideoTrack);
+
+                        const settings = activeVideoTrack.getSettings ? activeVideoTrack.getSettings() : {};
+                        const resolution = settings.width && settings.height
+                            ? ` • ${settings.width}×${settings.height}`
+                            : '';
+                        setScannerStatus(
+                            focused
+                                ? `Autofocus aktif${resolution} • arahkan barcode ke kotak`
+                                : `Kamera aktif${resolution} • arahkan barcode ke kotak`
+                        );
+                    }
+                }
             } catch (e) {
-                console.warn('Kamera resolusi tinggi gagal, mencoba kamera default:', e);
+                console.warn('Kamera high-accuracy gagal, mencoba fallback:', e);
 
                 try {
-                    // Fallback jika browser/perangkat menolak constraints di atas.
-                    await codeReader.decodeFromVideoDevice(
-                        null,
-                        videoEl,
-                        (result, err) => {
-                            if (result) {
-                                document.getElementById('input-barcode').value = result.text;
-                                stopCameraScanner();
-                                processSearchProduct();
-                            }
-                        }
-                    );
+                    await codeReader.decodeFromVideoDevice(null, videoEl, (result, err) => {
+                        if (result) onDetected(result);
+                    });
 
                     if (videoEl.srcObject) {
                         activeVideoTrack = videoEl.srcObject.getVideoTracks()[0];
+                        await applyBestFocus(activeVideoTrack);
+                        configureZoomControl(activeVideoTrack);
+                        configureTorchControl(activeVideoTrack);
+                        setScannerStatus('Fallback camera aktif • arahkan barcode ke kotak');
                     }
                 } catch (fallbackError) {
                     console.error('Kamera tidak dapat dibuka:', fallbackError);
@@ -756,40 +845,61 @@
             }
         }
 
-        function adjustCameraZoom(val) {
-            const zoom = parseFloat(val);
-            document.getElementById('zoom-val').innerText = `${zoom.toFixed(1)}x`;
+        async function adjustCameraZoom(val) {
+            const requestedZoom = parseFloat(val);
+            if (!Number.isFinite(requestedZoom)) return;
+            document.getElementById('zoom-val').innerText = `${requestedZoom.toFixed(1)}x`;
 
-            if (!activeVideoTrack) return;
+            if (!activeVideoTrack || !activeVideoTrack.getCapabilities) return;
 
             try {
-                const capabilities = activeVideoTrack.getCapabilities
-                    ? activeVideoTrack.getCapabilities()
-                    : {};
+                const caps = activeVideoTrack.getCapabilities();
+                if (!caps.zoom) return;
 
-                if (capabilities.zoom) {
-                    const min = Number(capabilities.zoom.min ?? 1);
-                    const max = Number(capabilities.zoom.max ?? 3);
-                    const safeZoom = Math.min(max, Math.max(min, zoom));
+                const min = Number(caps.zoom.min ?? 1);
+                const max = Number(caps.zoom.max ?? 3);
+                const safeZoom = Math.min(max, Math.max(min, requestedZoom));
 
-                    activeVideoTrack.applyConstraints({
-                        advanced: [{ zoom: safeZoom }]
-                    }).catch(err => {
-                        console.log('Native zoom tidak didukung penuh:', err);
-                    });
-                }
+                await activeVideoTrack.applyConstraints({
+                    advanced: [{ zoom: safeZoom }]
+                });
             } catch (err) {
-                console.log('Tidak bisa membaca kemampuan zoom kamera:', err);
+                console.log('Native zoom tidak didukung penuh:', err);
+            }
+        }
+
+        async function refocusCamera() {
+            if (!activeVideoTrack) return;
+            const ok = await applyBestFocus(activeVideoTrack);
+            setScannerStatus(ok ? 'Fokus ulang berhasil • lanjutkan scan' : 'Autofocus tidak tersedia di kamera ini');
+        }
+
+        async function toggleCameraTorch() {
+            if (!activeVideoTrack || !activeVideoTrack.getCapabilities) return;
+            const caps = activeVideoTrack.getCapabilities();
+            if (!caps.torch) return;
+
+            try {
+                torchEnabled = !torchEnabled;
+                await activeVideoTrack.applyConstraints({
+                    advanced: [{ torch: torchEnabled }]
+                });
+                const btn = document.getElementById('torch-btn');
+                btn.classList.toggle('bg-amber-500', torchEnabled);
+                btn.classList.toggle('bg-slate-700', !torchEnabled);
+                setScannerStatus(torchEnabled ? 'Lampu kamera aktif • scan barcode' : 'Lampu kamera mati • scan barcode');
+            } catch (err) {
+                console.log('Torch tidak didukung penuh:', err);
+                torchEnabled = false;
             }
         }
 
         function stopCameraScanner() {
+            scannerBusy = true;
             if (codeReader) {
                 try { codeReader.reset(); } catch (e) {}
             }
 
-            // reset() biasanya menghentikan stream ZXing, tetapi kita juga
-            // hentikan track secara eksplisit agar kamera benar-benar mati.
             const videoEl = document.getElementById('interactive');
             if (videoEl && videoEl.srcObject) {
                 videoEl.srcObject.getTracks().forEach(track => track.stop());
@@ -797,6 +907,7 @@
             }
 
             activeVideoTrack = null;
+            torchEnabled = false;
             document.getElementById('camera-container').classList.add('hidden');
         }
 
