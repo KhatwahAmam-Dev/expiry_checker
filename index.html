@@ -1,0 +1,755 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Store Expiry & Return Intelligence - AM024</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome untuk Ikon Modern -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- JsBarcode untuk Render Barcode Visual -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsbarcode/3.11.5/JsBarcode.all.min.js"></script>
+    <!-- SheetJS (xlsx) untuk Export Excel -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- html2pdf untuk Export PDF -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+    <!-- ZXing Library untuk Kamera Barcode Scanner -->
+    <script type="text/javascript" src="https://unpkg.com/@zxing/library@latest"></script>
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        brand: { 50: '#eef2ff', 100: '#e0e7ff', 500: '#6366f1', 600: '#4f46e5', 700: '#4338ca' }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        body { font-family: 'Inter', sans-serif; }
+        .glass-card { background: rgba(255, 255, 255, 0.95); backdrop-filter: blur(10px); }
+    </style>
+</head>
+<body class="h-full bg-slate-100 text-slate-800 flex flex-col antialiased">
+
+    <!-- HEADER / NAVBAR -->
+    <header class="bg-indigo-900 text-white shadow-md sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex justify-between items-center">
+            <div class="flex items-center space-x-3">
+                <div class="bg-indigo-700 p-2 rounded-lg text-indigo-200">
+                    <i class="fa-solid fa-box-archive text-xl"></i>
+                </div>
+                <div>
+                    <h1 class="font-bold text-lg tracking-wide">Store Expiry Checker</h1>
+                    <p class="text-xs text-indigo-300">Store AM024 • Retur & Compliance System</p>
+                </div>
+            </div>
+            <div id="user-session-badge" class="hidden flex items-center space-x-3 bg-indigo-800 px-3 py-1.5 rounded-full text-xs">
+                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                <span id="badge-crew" class="font-medium">Crew A</span>
+                <span class="text-indigo-400">|</span>
+                <span id="badge-rak" class="text-indigo-200">-</span>
+                <button onclick="logoutSession()" class="text-rose-300 hover:text-rose-100 ml-2" title="Keluar"><i class="fa-solid fa-power-off"></i></button>
+            </div>
+        </div>
+    </header>
+
+    <!-- MAIN CONTAINER -->
+    <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 flex flex-col">
+
+        <!-- STEP 1: LOGIN SECTION -->
+        <section id="view-login" class="my-auto max-w-md w-full mx-auto bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+            <div class="text-center mb-6">
+                <div class="inline-flex bg-indigo-50 text-indigo-600 p-3 rounded-full mb-3">
+                    <i class="fa-solid fa-lock text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">Autentikasi Petugas</h2>
+                <p class="text-sm text-slate-500 mt-1">Masukkan kredensial tugas untuk memulai pengecekan.</p>
+            </div>
+            <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Username</label>
+                    <input type="text" id="login-user" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Crew A">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Password</label>
+                    <input type="password" id="login-pass" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="••••••••">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow-md">
+                    Masuk & Mulai Tugas
+                </button>
+            </form>
+        </section>
+
+        <!-- STEP 2: SETUP RAK & SHELVING -->
+        <section id="view-setup" class="hidden my-auto max-w-md w-full mx-auto bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+            <div class="text-center mb-6">
+                <div class="inline-flex bg-indigo-50 text-indigo-600 p-3 rounded-full mb-3">
+                    <i class="fa-solid fa-cubes text-2xl"></i>
+                </div>
+                <h2 class="text-2xl font-bold text-slate-900">Lokasi & Shelving</h2>
+                <p class="text-sm text-slate-500 mt-1">Tentukan posisi rak pajangan yang sedang Anda cek.</p>
+            </div>
+            <form id="form-setup" onsubmit="handleSetup(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nama Rak</label>
+                    <input type="text" id="setup-rak" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: Andrew">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nomor Urut Shelving</label>
+                    <input type="number" min="1" id="setup-shelving" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 focus:ring-2 focus:ring-indigo-500 focus:outline-none text-sm" placeholder="Contoh: 1">
+                </div>
+                <button type="submit" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg transition text-sm shadow-md">
+                    Lanjutkan ke Pengecekan
+                </button>
+            </form>
+        </section>
+
+        <!-- STEP 3: DASHBOARD UTAMA -->
+        <section id="view-dashboard" class="hidden flex-col flex-grow space-y-6">
+            
+            <!-- TOP BAR INFO & CONTROLS -->
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-slate-200 flex flex-wrap items-center justify-between gap-4">
+                <div class="flex items-center space-x-4">
+                    <div class="bg-indigo-50 text-indigo-600 px-3 py-2 rounded-lg">
+                        <i class="fa-solid fa-location-dot"></i> Rak: <span id="lbl-rak" class="font-bold"></span> | Shelving: <span id="lbl-shelving" class="font-bold"></span>
+                    </div>
+                    <button onclick="openChangeShelvingModal()" class="text-xs bg-slate-100 hover:bg-slate-200 px-3 py-2 rounded-lg font-medium transition text-slate-700 border border-slate-300">
+                        <i class="fa-solid fa-arrows-rotate mr-1"></i> Pindah Rak / Shelving
+                    </button>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <span id="data-source-status" class="text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium">Online Mode</span>
+                    <label class="cursor-pointer text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 px-3 py-2 rounded-lg font-medium transition border border-amber-200">
+                        <i class="fa-solid fa-file-arrow-up mr-1"></i> Upload Master JSON/CSV
+                        <input type="file" id="local-json-upload" accept=".json,.csv" class="hidden" onchange="handleLocalDataUpload(event)">
+                    </label>
+                </div>
+            </div>
+
+            <!-- SCANNER & INPUT SECTION -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <!-- Barcode Input / Scanner Panel -->
+                <div class="bg-white p-5 rounded-xl shadow-sm border border-slate-200 flex flex-col justify-between">
+                    <div>
+                        <h3 class="font-bold text-slate-800 mb-3 text-sm flex items-center">
+                            <i class="fa-solid fa-barcode text-indigo-600 mr-2"></i> Input / Scan Barcode Produk
+                        </h3>
+                        <div class="space-y-3">
+                            <div>
+                                <label class="block text-xs text-slate-500 mb-1">Scan Barcode / Ketik Barcode / PLU</label>
+                                <div class="flex space-x-2">
+                                    <input type="text" id="input-barcode" class="flex-grow px-3 py-2 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none" placeholder="Scan/Ketik Barcode...">
+                                    <button onclick="processSearchProduct()" class="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition">
+                                        Cari
+                                    </button>
+                                </div>
+                            </div>
+                            <button onclick="startCameraScanner()" class="w-full bg-slate-800 hover:bg-slate-900 text-white py-2 rounded-lg text-sm font-medium transition flex items-center justify-center space-x-2">
+                                <i class="fa-solid fa-camera"></i>
+                                <span>Buka Kamera Scanner</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="mt-4 text-xs text-slate-400">
+                        *Mendukung kamera HP jernih & bersih untuk pembacaan barcode instan.
+                    </div>
+                </div>
+
+                <!-- Live Camera View Modal / Container (Hidden by default) -->
+                <div id="camera-container" class="hidden md:col-span-2 bg-slate-900 rounded-xl p-4 flex flex-col items-center justify-center relative overflow-hidden">
+                    <video id="interactive" class="w-full h-48 object-cover rounded-lg"></video>
+                    <button onclick="stopCameraScanner()" class="absolute top-4 right-4 bg-rose-600 hover:bg-rose-700 text-white px-3 py-1 rounded-lg text-xs font-semibold">Tutup Kamera</button>
+                    <p class="text-xs text-slate-300 mt-2">Arahkan kamera ke barcode produk...</p>
+                </div>
+
+                <!-- Quick Stats / Summary Card -->
+                <div class="md:col-span-2 bg-gradient-to-r from-indigo-600 to-indigo-800 text-white p-6 rounded-xl shadow-sm flex flex-col justify-between">
+                    <div>
+                        <h3 class="text-indigo-100 text-xs font-semibold uppercase tracking-wider">Ringkasan Sesi Pengecekan</h3>
+                        <div class="grid grid-cols-3 gap-4 mt-4">
+                            <div class="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                                <span class="text-2xl font-bold" id="stat-total-scanned">0</span>
+                                <p class="text-xs text-indigo-200 mt-1">Total Item Scan</p>
+                            </div>
+                            <div class="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                                <span class="text-2xl font-bold text-amber-300" id="stat-total-warning">0</span>
+                                <p class="text-xs text-indigo-200 mt-1">Perlu Retur / Buffer</p>
+                            </div>
+                            <div class="bg-white/10 p-3 rounded-lg backdrop-blur-sm">
+                                <span class="text-2xl font-bold text-rose-300" id="stat-total-expired">0</span>
+                                <p class="text-xs text-indigo-200 mt-1">Sudah Expired</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="flex flex-wrap gap-3 mt-4 pt-4 border-t border-indigo-500/40">
+                        <button onclick="exportToExcel()" class="bg-emerald-600 hover:bg-emerald-700 text-white text-xs px-4 py-2 rounded-lg font-medium transition shadow-sm">
+                            <i class="fa-solid fa-file-excel mr-1.5"></i> Export Excel
+                        </button>
+                        <button onclick="exportToPDF()" class="bg-rose-600 hover:bg-rose-700 text-white text-xs px-4 py-2 rounded-lg font-medium transition shadow-sm">
+                            <i class="fa-solid fa-file-pdf mr-1.5"></i> Export PDF Form Resmi
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TABLE HASIL SCAN & PENGECEKAN -->
+            <div class="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden flex flex-col">
+                <div class="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50">
+                    <h3 class="font-bold text-slate-800 text-sm">Daftar Produk Terperiksa di Rak</h3>
+                    <span class="text-xs text-slate-500" id="table-count">0 produk tercatat</span>
+                </div>
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-slate-100 text-slate-700 uppercase font-semibold text-[11px] border-b border-slate-200">
+                                <th class="p-3">Lokasi Rak</th>
+                                <th class="p-3">Barcode Visual</th>
+                                <th class="p-3">PLU & Nama Barang</th>
+                                <th class="p-3">Retur Hari (r_h)</th>
+                                <th class="p-3">Exp. Date</th>
+                                <th class="p-3">Batas Tarik Retur</th>
+                                <th class="p-3">Status Compliance</th>
+                                <th class="p-3 text-center">Qty</th>
+                                <th class="p-3 text-center">Aksi</th>
+                            </tr>
+                        </thead>
+                        <tbody id="scanned-items-body" class="divide-y divide-slate-200">
+                            <!-- Dynamic Content -->
+                            <tr>
+                                <td colspan="9" class="text-center py-8 text-slate-400">Belum ada produk yang di-scan pada sesi ini.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- MODAL INPUT EXP. DATE & QTY -->
+    <div id="modal-product-input" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white max-w-lg w-full rounded-2xl shadow-2xl p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-900 mb-1" id="modal-product-title">Detail Produk</h3>
+            <p class="text-xs text-slate-500 mb-4" id="modal-product-subtitle"></p>
+            
+            <form onsubmit="submitProductDetails(event)" class="space-y-4">
+                <input type="hidden" id="modal-hidden-barcode">
+                <input type="hidden" id="modal-hidden-plu">
+                
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Tanggal Expired (Exp. Date)</label>
+                    <input type="date" id="modal-exp-date" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Kuantitas (Qty)</label>
+                    <input type="number" min="1" value="1" id="modal-qty" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500 focus:outline-none">
+                </div>
+
+                <div class="flex space-x-3 pt-2">
+                    <button type="button" onclick="closeProductModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm transition">Batal</button>
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg text-sm transition shadow-md">Simpan Data</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL MANUAL MASTER ADDITION (JIKA BARANG TIDAK DITEMUKAN) -->
+    <div id="modal-manual-master" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white max-w-lg w-full rounded-2xl shadow-2xl p-6 border border-slate-100">
+            <div class="flex items-center space-x-3 mb-4 text-amber-600">
+                <i class="fa-solid fa-triangle-exclamation text-2xl"></i>
+                <div>
+                    <h3 class="text-lg font-bold text-slate-900">Produk Tidak Ditemukan di Master Data</h3>
+                    <p class="text-xs text-slate-500">Barcode belum terdaftar. Tambahkan secara manual ke master?</p>
+                </div>
+            </div>
+
+            <form onsubmit="submitManualMaster(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nomor Barcode</label>
+                    <input type="text" id="manual-barcode" readonly class="w-full px-4 py-2 rounded-lg border bg-slate-100 text-slate-600 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">PLU Barang</label>
+                    <input type="text" id="manual-plu" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: 998877">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Deskripsi / Nama Barang</label>
+                    <input type="text" id="manual-descp" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: PRODUK BARU TOKO 500ML">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Retur Hari (r_h)</label>
+                    <input type="text" id="manual-returh" value="R_H-90 DAYS" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm focus:ring-2 focus:ring-indigo-500" placeholder="Contoh: R_H-90 DAYS atau 0">
+                </div>
+                <div class="flex space-x-3 pt-2">
+                    <button type="button" onclick="closeManualMasterModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm">Batal</button>
+                    <button type="submit" class="flex-1 bg-amber-600 hover:bg-amber-700 text-white font-semibold py-2.5 rounded-lg text-sm shadow-md">Tambah & Lanjutkan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- MODAL PINDAH RAK -->
+    <div id="modal-shelving" class="fixed inset-0 bg-slate-900/50 backdrop-blur-xs z-50 hidden flex items-center justify-center p-4">
+        <div class="bg-white max-w-sm w-full rounded-2xl shadow-2xl p-6 border border-slate-100">
+            <h3 class="text-lg font-bold text-slate-900 mb-4">Pindah Rak & Shelving</h3>
+            <form onsubmit="handleUpdateShelving(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nama Rak</label>
+                    <input type="text" id="update-rak" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm">
+                </div>
+                <div>
+                    <label class="block text-xs font-semibold uppercase text-slate-600 mb-1">Nomor Shelving</label>
+                    <input type="number" min="1" id="update-shelving" required class="w-full px-4 py-2.5 rounded-lg border border-slate-300 text-sm">
+                </div>
+                <div class="flex space-x-3 pt-2">
+                    <button type="button" onclick="closeChangeShelvingModal()" class="flex-1 bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold py-2.5 rounded-lg text-sm">Batal</button>
+                    <button type="submit" class="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-2.5 rounded-lg text-sm">Simpan</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- HIDDEN EXPORT PDF CONTAINER (FORMAT RESMI) -->
+    <div id="pdf-export-area" class="hidden p-8 bg-white text-slate-800" style="width: 210mm; min-height: 297mm; margin: auto;">
+        <div class="border-b-2 border-slate-800 pb-4 mb-6 flex justify-between items-end">
+            <div>
+                <h2 class="text-2xl font-bold uppercase tracking-wider">Laporan Pengecekan Expired & Retur</h2>
+                <p class="text-xs text-slate-500">Store Code: AM024 | Manajemen Kelayakan Produk Pajangan</p>
+            </div>
+            <div class="text-right text-xs">
+                <p><strong>Tanggal Cetak:</strong> <span id="pdf-print-date"></span></p>
+                <p><strong>Petugas:</strong> <span id="pdf-print-crew"></span></p>
+            </div>
+        </div>
+
+        <div class="mb-4 bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs flex justify-between">
+            <div><strong>Rak Aktif:</strong> <span id="pdf-print-rak">-</span></div>
+            <div><strong>Shelving No:</strong> <span id="pdf-print-shelving">-</span></div>
+            <div><strong>Total Item:</strong> <span id="pdf-print-total">0</span></div>
+        </div>
+
+        <table class="w-full border-collapse border border-slate-400 text-xs mb-8">
+            <thead>
+                <tr class="bg-slate-200 text-slate-900 text-center">
+                    <th class="border border-slate-400 p-2">No</th>
+                    <th class="border border-slate-400 p-2">Barcode Visual</th>
+                    <th class="border border-slate-400 p-2">PLU & Deskripsi Barang</th>
+                    <th class="border border-slate-400 p-2">Exp Date</th>
+                    <th class="border border-slate-400 p-2">Batas Tarik Retur</th>
+                    <th class="border border-slate-400 p-2">Qty</th>
+                </tr>
+            </thead>
+            <tbody id="pdf-table-body">
+                <!-- Dynamic PDF Rows -->
+            </tbody>
+        </table>
+
+        <div class="flex justify-between items-end mt-16 pt-8 border-t border-slate-300 text-xs">
+            <div>
+                <p class="mb-12">Mengetahui / Kepala Toko,</p>
+                <p class="font-bold underline">( ........................................ )</p>
+            </div>
+            <div class="text-right">
+                <p class="mb-12">Petugas Pemeriksa (<span id="pdf-print-crew-sign">Crew A</span>),</p>
+                <p class="font-bold underline">( <span id="pdf-print-crew-name">Crew A</span> )</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- JAVASCRIPT LOGIC & CONTROLLER -->
+    <script>
+        let masterData = [];
+        let scannedRecords = [];
+        let sessionState = {
+            username: '',
+            rak: '',
+            shelving: ''
+        };
+        let codeReader = null;
+
+        // Inisialisasi Data Master (GitHub Online atau Fallback Local)
+        async function loadMasterData() {
+            const onlineUrl = "https://raw.githubusercontent.com/CahSragen77/masterDataJson/main/ms_item.json";
+            try {
+                const response = await fetch(onlineUrl);
+                if (!response.ok) throw new Error('Network response failed');
+                masterData = await response.json();
+                document.getElementById('data-source-status').innerText = "Online Mode (GitHub Connected)";
+                document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 font-medium";
+            } catch (error) {
+                console.warn("Gagal terhubung ke GitHub online, menggunakan data embedded / fallback:", error);
+                // Fallback Embedded Data contoh sesuai prompt Anda
+                masterData = [
+                  {"kd_store":"AM024","plu":"20420135","descp":"KODOMO FOAMING SHAMPOO ORANGE PUMP 250ML","barcode":"8998866107754","retur_h":"R_H-90 DAYS"},
+                  {"kd_store":"AM024","plu":"40510841","descp":"THANKFUL MASKER EARLOOP ADULT 5S","barcode":"8997029809719","retur_h":"R_H-90 DAYS"},
+                  {"kd_store":"AM024","plu":"10320211","descp":"DEL MONTE SAUCE TOMAT PET 135ML","barcode":"8998888710161","retur_h":"R_H-120 DAYS"},
+                  {"kd_store":"AM024","plu":"10620961","descp":"GLICO POCKY MATCHA BOX 33GR","barcode":"8990044000048","retur_h":"RH-90"},
+                  {"kd_store":"AM024","plu":"20110111","descp":"PANADOL EXTRA 10S","barcode":"8992695110206","retur_h":"R_H-90 DAYS"}
+                ];
+                document.getElementById('data-source-status').innerText = "Offline Mode / Fallback Active";
+                document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-800 font-medium";
+            }
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            loadMasterData();
+        });
+
+        // Handler Login Hardcore
+        function handleLogin(e) {
+            e.preventDefault();
+            const user = document.getElementById('login-user').value.trim();
+            sessionState.username = user;
+            
+            document.getElementById('badge-crew').innerText = user;
+            document.getElementById('view-login').classList.add('hidden');
+            document.getElementById('view-setup').classList.remove('hidden');
+            document.getElementById('user-session-badge').classList.remove('hidden');
+        }
+
+        // Handler Setup Rak & Shelving
+        function handleSetup(e) {
+            e.preventDefault();
+            sessionState.rak = document.getElementById('setup-rak').value.trim();
+            sessionState.shelving = document.getElementById('setup-shelving').value.trim();
+
+            document.getElementById('lbl-rak').innerText = sessionState.rak;
+            document.getElementById('lbl-shelving').innerText = sessionState.shelving;
+            document.getElementById('badge-rak').innerText = `Rak: ${sessionState.rak} (Sh. ${sessionState.shelving})`;
+
+            document.getElementById('view-setup').classList.add('hidden');
+            document.getElementById('view-dashboard').classList.remove('hidden');
+            document.getElementById('view-dashboard').classList.add('flex');
+        }
+
+        // Upload local JSON/CSV
+        function handleLocalDataUpload(e) {
+            const file = e.target.files[0];
+            if (!file) return;
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+                try {
+                    masterData = JSON.parse(evt.target.result);
+                    alert("Data master lokal berhasil diunggah dan disinkronkan!");
+                    document.getElementById('data-source-status').innerText = "Local Uploaded Mode";
+                    document.getElementById('data-source-status').className = "text-xs px-2.5 py-1 rounded-full bg-indigo-100 text-indigo-800 font-medium";
+                } catch (err) {
+                    alert("Format file JSON tidak valid.");
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        // Proses Pencarian Barcode / PLU
+        function processSearchProduct() {
+            const query = document.getElementById('input-barcode').value.trim();
+            if (!query) return;
+
+            let product = masterData.find(item => item.barcode === query || item.plu === query);
+
+            if (!product) {
+                // Jika tidak ketemu di master, minta persetujuan tambah manual
+                document.getElementById('manual-barcode').value = query;
+                document.getElementById('modal-manual-master').classList.remove('hidden');
+                return;
+            }
+
+            openProductModal(product);
+        }
+
+        function openProductModal(product) {
+            document.getElementById('modal-hidden-barcode').value = product.barcode;
+            document.getElementById('modal-hidden-plu').value = product.plu;
+            document.getElementById('modal-product-title').innerText = product.descp;
+            document.getElementById('modal-product-subtitle').innerText = `PLU: ${product.plu} | Barcode: ${product.barcode} | r_h: ${product.retur_h || '0'}`;
+            document.getElementById('modal-qty').value = 1;
+            document.getElementById('modal-exp-date').value = '';
+            document.getElementById('modal-product-input').classList.remove('hidden');
+        }
+
+        function closeProductModal() {
+            document.getElementById('modal-product-input').classList.add('hidden');
+            document.getElementById('input-barcode').value = '';
+            document.getElementById('input-barcode').focus();
+        }
+
+        function closeManualMasterModal() {
+            document.getElementById('modal-manual-master').classList.add('hidden');
+        }
+
+        // Submit Tambah Manual Master
+        function submitManualMaster(e) {
+            e.preventDefault();
+            const newProd = {
+                kd_store: "AM024",
+                barcode: document.getElementById('manual-barcode').value,
+                plu: document.getElementById('manual-plu').value,
+                descp: document.getElementById('manual-descp').value,
+                retur_h: document.getElementById('manual-returh').value
+            };
+            masterData.push(newProd);
+            closeManualMasterModal();
+            openProductModal(newProd);
+        }
+
+        // Submit Data Pengecekan Produk & Hitung Logika Retur Matematika
+        function submitProductDetails(e) {
+            e.preventDefault();
+            const barcode = document.getElementById('modal-hidden-barcode').value;
+            const plu = document.getElementById('modal-hidden-plu').value;
+            const expDateStr = document.getElementById('modal-exp-date').value;
+            const qty = parseInt(document.getElementById('modal-qty').value);
+
+            const product = masterData.find(item => item.barcode === barcode);
+            
+            // Logika Perhitungan Retur Hari (r_h) + Buffer 14 hari
+            // Contoh: r_h = -90 hari + buffer 14 hari = 104 hari sebelum exp date
+            let returDays = 90; // Default r_h = 0 dianggap 90 hari / 3 bulan
+            if (product && product.retur_h) {
+                let match = product.retur_h.match(/-(\d+)/);
+                if (match) {
+                    returDays = parseInt(match[1]);
+                }
+            }
+            const bufferDays = 14;
+            const totalDaysBeforeExp = returDays + bufferDays;
+
+            const expDate = new Date(expDateStr);
+            const today = new Date();
+            
+            // Hitung Tanggal Tarik Retur
+            let tarikReturDate = new Date(expDate);
+            tarikReturDate.setDate(tarikReturDate.getDate() - totalDaysBeforeExp);
+
+            // Sisa hari menuju tanggal tarik retur
+            const diffTime = tarikReturDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+            let statusText = "Aman (Pajang)";
+            let statusBadgeClass = "bg-emerald-100 text-emerald-800";
+
+            if (today >= expDate) {
+                statusText = "EXPIRED (Musnahkan/Retur)";
+                statusBadgeClass = "bg-rose-100 text-rose-800 font-bold";
+            } else if (today >= tarikReturDate) {
+                statusText = "Wajib Tarik (Retur DC)";
+                statusBadgeClass = "bg-amber-100 text-amber-800 font-bold";
+            }
+
+            // Simpan record (duplikat dibiarkan baris terpisah sesuai rule)
+            const record = {
+                lokasiRak: `${sessionState.rak} (Sh. ${sessionState.shelving})`,
+                barcode: product.barcode,
+                plu: product.plu,
+                descp: product.descp,
+                retur_h: product.retur_h || '0 (Default 90 Hari)',
+                expDate: expDateStr,
+                tarikDate: tarikReturDate.toISOString().split('T')[0],
+                status: statusText,
+                statusClass: statusBadgeClass,
+                qty: qty
+            };
+
+            scannedRecords.push(record);
+            closeProductModal();
+            renderTable();
+        }
+
+        // Render Tabel Data Ter-scan
+        function renderTable() {
+            const tbody = document.getElementById('scanned-items-body');
+            document.getElementById('table-count').innerText = `${scannedRecords.length} produk tercatat`;
+            
+            let totalScanned = scannedRecords.reduce((acc, curr) => acc + curr.qty, 0);
+            let totalWarning = scannedRecords.filter(r => r.status.includes('Tarik')).length;
+            let totalExpired = scannedRecords.filter(r => r.status.includes('EXPIRED')).length;
+
+            document.getElementById('stat-total-scanned').innerText = totalScanned;
+            document.getElementById('stat-total-warning').innerText = totalWarning;
+            document.getElementById('stat-total-expired').innerText = totalExpired;
+
+            if (scannedRecords.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="9" class="text-center py-8 text-slate-400">Belum ada produk yang di-scan pada sesi ini.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = '';
+            scannedRecords.forEach((item, index) => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-50 transition border-b border-slate-100";
+                tr.innerHTML = `
+                    <td class="p-3 font-medium text-slate-700">${item.lokasiRak}</td>
+                    <td class="p-3"><svg class="barcode-svg" data-barcode="${item.barcode}"></svg></td>
+                    <td class="p-3">
+                        <div class="font-bold text-slate-900">${item.descp}</div>
+                        <div class="text-slate-500 text-[10px]">PLU: ${item.plu} | Barcode: ${item.barcode}</div>
+                    </td>
+                    <td class="p-3 text-slate-600">${item.retur_h}</td>
+                    <td class="p-3 font-semibold text-slate-800">${item.expDate}</td>
+                    <td class="p-3 font-semibold text-indigo-600">${item.tarikDate}</td>
+                    <td class="p-3"><span class="px-2 py-1 rounded-full text-[10px] ${item.statusClass}">${item.status}</span></td>
+                    <td class="p-3 text-center font-bold text-slate-900">${item.qty}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="deleteRecord(${index})" class="text-rose-500 hover:text-rose-700 p-1"><i class="fa-solid fa-trash-can"></i></button>
+                    </td>
+                `;
+                tbody.appendChild(tr);
+            });
+
+            // Generate Barcode Visual menggunakan JsBarcode
+            setTimeout(() => {
+                document.querySelectorAll('.barcode-svg').forEach(svg => {
+                    const code = svg.getAttribute('data-barcode');
+                    if(code) {
+                        try {
+                            JsBarcode(svg, code, { format: "CODE128", width: 1.2, height: 30, displayValue: true, fontSize: 10 });
+                        } catch(e) {}
+                    }
+                });
+            }, 50);
+        }
+
+        function deleteRecord(index) {
+            scannedRecords.splice(index, 1);
+            renderTable();
+        }
+
+        // Pindah Rak Modal Controller
+        function openChangeShelvingModal() {
+            document.getElementById('update-rak').value = sessionState.rak;
+            document.getElementById('update-shelving').value = sessionState.shelving;
+            document.getElementById('modal-shelving').classList.remove('hidden');
+        }
+        function closeChangeShelvingModal() {
+            document.getElementById('modal-shelving').classList.add('hidden');
+        }
+        function handleUpdateShelving(e) {
+            e.preventDefault();
+            sessionState.rak = document.getElementById('update-rak').value.trim();
+            sessionState.shelving = document.getElementById('update-shelving').value.trim();
+            document.getElementById('lbl-rak').innerText = sessionState.rak;
+            document.getElementById('lbl-shelving').innerText = sessionState.shelving;
+            document.getElementById('badge-rak').innerText = `Rak: ${sessionState.rak} (Sh. ${sessionState.shelving})`;
+            closeChangeShelvingModal();
+        }
+
+        function logoutSession() {
+            location.reload();
+        }
+
+        // Kamera Barcode Scanner Integrasi ZXing
+        function startCameraScanner() {
+            const container = document.getElementById('camera-container');
+            container.classList.remove('hidden');
+            codeReader = new ZXing.BrowserBarcodeReader();
+            codeReader.decodeFromVideoDevice(null, 'interactive', (result, err) => {
+                if (result) {
+                    document.getElementById('input-barcode').value = result.text;
+                    stopCameraScanner();
+                    processSearchProduct();
+                }
+            }).catch(err => console.error(err));
+        }
+
+        function stopCameraScanner() {
+            if (codeReader) {
+                codeReader.reset();
+            }
+            document.getElementById('camera-container').classList.add('hidden');
+        }
+
+        // Export ke Excel
+        function exportToExcel() {
+            if (scannedRecords.length === 0) {
+                alert("Tidak ada data untuk diexport!");
+                return;
+            }
+            let dataFormatted = scannedRecords.map((r, i) => ({
+                No: i + 1,
+                "Lokasi Rak": r.lokasiRak,
+                "Barcode": r.barcode,
+                "PLU": r.plu,
+                "Deskripsi Barang": r.descp,
+                "Retur Hari (r_h)": r.retur_h,
+                "Expired Date": r.expDate,
+                "Batas Tarik Retur": r.tarikDate,
+                "Status Compliance": r.status,
+                "Qty": r.qty
+            }));
+
+            const worksheet = XLSX.utils.json_to_sheet(dataFormatted);
+            const workbook = XLSX.utils.book_new();
+            XLSX.utils.book_append_sheet(workbook, worksheet, "Pengecekan Expired");
+            XLSX.writeFile(workbook, `Laporan_Expired_${sessionState.rak}_Sh${sessionState.shelving}.xlsx`);
+        }
+
+        // Export ke PDF Form Resmi
+        function exportToPDF() {
+            if (scannedRecords.length === 0) {
+                alert("Tidak ada data untuk diexport ke PDF!");
+                return;
+            }
+
+            document.getElementById('pdf-print-date').innerText = new Date().toLocaleDateString('id-ID');
+            document.getElementById('pdf-print-crew').innerText = sessionState.username;
+            document.getElementById('pdf-print-crew-sign').innerText = sessionState.username;
+            document.getElementById('pdf-print-crew-name').innerText = sessionState.username;
+            document.getElementById('pdf-print-rak').innerText = sessionState.rak;
+            document.getElementById('pdf-print-shelving').innerText = sessionState.shelving;
+            document.getElementById('pdf-print-total').innerText = scannedRecords.reduce((a, b) => a + b.qty, 0);
+
+            const pdfBody = document.getElementById('pdf-table-body');
+            pdfBody.innerHTML = '';
+
+            scannedRecords.forEach((item, index) => {
+                pdfBody.innerHTML += `
+                    <tr>
+                        <td class="border border-slate-400 p-2 text-center">${index + 1}</td>
+                        <td class="border border-slate-400 p-2 text-center"><svg class="pdf-barcode-svg" data-barcode="${item.barcode}"></svg></td>
+                        <td class="border border-slate-400 p-2">
+                            <div class="font-bold">${item.descp}</div>
+                            <div class="text-[10px] text-slate-500">PLU: ${item.plu} | Barcode: ${item.barcode}</div>
+                        </td>
+                        <td class="border border-slate-400 p-2 text-center font-semibold">${item.expDate}</td>
+                        <td class="border border-slate-400 p-2 text-center">${item.tarikDate} (${item.status})</td>
+                        <td class="border border-slate-400 p-2 text-center font-bold">${item.qty}</td>
+                    </tr>
+                `;
+            });
+
+            const area = document.getElementById('pdf-export-area');
+            area.classList.remove('hidden');
+
+            setTimeout(() => {
+                document.querySelectorAll('.pdf-barcode-svg').forEach(svg => {
+                    const code = svg.getAttribute('data-barcode');
+                    if(code) {
+                        try {
+                            JsBarcode(svg, code, { format: "CODE128", width: 1, height: 25, displayValue: true, fontSize: 9 });
+                        } catch(e){}
+                    }
+                });
+
+                const opt = {
+                    margin:       10,
+                    filename:     `Form_Retur_${sessionState.rak}_Sh${sessionState.shelving}.pdf`,
+                    image:        { type: 'jpeg', quality: 0.98 },
+                    html2canvas:  { scale: 2, useCORS: true },
+                    jsPDF:        { unit: 'mm', format: 'a4', orientation: 'portrait' }
+                };
+
+                html2pdf().from(area).set(opt).save().then(() => {
+                    area.classList.add('hidden');
+                });
+            }, 300);
+        }
+    </script>
+</body>
+</html>
